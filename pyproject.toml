@@ -1,0 +1,14 @@
+[project]
+name = "monocular-demos"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "~=3.11"
+dependencies = [
+    "gradio",
+    "numpy<2.0.0",
+    "body_models",
+    ]
+
+[tool.uv.sources]
+body_models = { git = "https://github.com/IntelligentSensingAndRehabilitation/BodyModels" }
