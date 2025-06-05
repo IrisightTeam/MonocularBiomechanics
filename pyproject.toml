@@ -6,9 +6,4 @@ readme = "README.md"
 requires-python = "~=3.11"
 dependencies = [
     "gradio",
-    "numpy<2.0.0",
-    "body_models",
-    ]
-
-[tool.uv.sources]
-body_models = { git = "https://github.com/IntelligentSensingAndRehabilitation/BodyModels" }
+]
