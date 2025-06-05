@@ -22,8 +22,9 @@ from typing import List
 from utils import video_reader, load_metrabs, joint_names
 from pose_pipeline.wrappers.bridging import get_model as get_metrabs_model
 from body_models.biomechanics_mjx.forward_kinematics import ForwardKinematics
+from body_models.biomechanics_mjx.visualize import render_trajectory
 fk = ForwardKinematics(
-    xml_path="humanoid/humanoid_torque.xml",
+    xml_path="humanoid/humanoid_torque_rl.xml",
 )
 
 jax.config.update("jax_compilation_cache_dir", "./jax_cache")
@@ -52,6 +53,35 @@ def save_metrabs_data(accumulated, video_name):
 
         with open(f"{fname}_keypoints.npz", "wb") as f:
             np.savez(f, keypoints3d=pose3d, keypoints2d=pose2d, boxes=boxes, confs=confs)
+
+def render_mjx(selected_file, progress=gr.Progress()):
+    """Load saved data and create visualizations"""
+    if not selected_file or selected_file == "No fitted models found":
+        return "Please select a fitted model file first.", None, None
+    
+    fname = selected_file.replace('_fitted_model.npz', '')
+    
+    # Try to load keypoints data
+    biomech_file = selected_file
+    
+    result_text = ""
+    video_filename = f"{fname}_mjx.mp4"
+    
+    if os.path.exists(biomech_file):
+        with open(biomech_file, "rb") as f:
+            data = np.load(f, allow_pickle=True)
+            result_text += f"Loaded biomechanics data: {biomech_file}\n"
+            qpos = data['qpos']
+    progress(0, desc="Rendering Video...")
+    render_trajectory(
+        qpos,
+        filename = video_filename,
+    )
+    progress(1.0, desc="Visualization complete!")
+    result_text += f"Rendered visualization: {video_filename}\n"
+
+    return result_text, video_filename
+
 
 
 def get_framerate(video_path):
@@ -131,6 +161,10 @@ def process_videos_with_biomechanics(
     """
     Process the uploaded videos with biomechanics fitting. Replace this with your actual processing logic.
     """
+    import equinox as eqx
+    import jax
+    jax.clear_caches()
+    eqx.clear_caches()
 
     max_iters = 10000
 
@@ -172,7 +206,7 @@ def process_videos_with_biomechanics(
 
     progress(0, desc="Building biomechanics model...")
     model = get_model(
-        dataset, xml_path="humanoid/humanoid_torque.xml", joint_names=joint_names
+        dataset, xml_path="humanoid/humanoid_torque_rl.xml", joint_names=joint_names
     )  # might need to change the site names
     model, metrics = fit_model(
         model,
@@ -186,7 +220,7 @@ def process_videos_with_biomechanics(
     for i, video_path in enumerate(video_files):
         progress(
             i / len(video_files),
-            desc=f"Processing video {i+1}/{len(video_files)} for biomechanics fitting",
+            desc=f"Saving biomechanics for video {i+1}/{len(video_files)}.",
         )
         timestamps = dataset.get_all_timestamps(i)
 
@@ -210,6 +244,7 @@ def process_videos_with_biomechanics(
                 rnc=np.array(rnc),
                 sites=np.array(state.site_xpos),
                 joints=np.array(state.xpos),
+                scale=np.array(model.body_scale)
             )
 
     return f"Successfully processed {len(dataset)} videos with biomechanics fitting."
@@ -412,6 +447,41 @@ with gr.Blocks(title="Open Portable Biomechanics Lab") as demo:
             inputs=[fitted_model_dropdown, joint_selection_dropdown],
             outputs=[viz_info, viz_plot1, viz_plot2]
         )
+    
+    with gr.Tab("Visualization"):
+        with gr.Row():
+            with gr.Column():
+
+                # Dropdown with all fitted model files
+                fitted_model_dropdown = gr.Dropdown(
+                    choices=get_available_fitted_models(),
+                    label="Select Fitted Model",
+                    value=None,
+                    interactive=True
+                )
+
+            with gr.Column():
+                viz_info = gr.Textbox(
+                    label="Data Information",
+                    lines=10,
+                    interactive=False
+                )
+        
+        visualize_btn = gr.Button("Render Visualization", variant="primary")
+
+        # create video viewer
+        video_viewer = gr.Video(label="Visualization Video", autoplay=True, height=400)
+
+        refresh_btn.click(
+            fn=lambda: gr.Dropdown(choices=get_available_fitted_models()),
+            outputs=[fitted_model_dropdown]
+        )
+        
+        visualize_btn.click(
+            fn=render_mjx,
+            inputs=[fitted_model_dropdown],
+            outputs=[viz_info, video_viewer]
+        )
 
 
-demo.launch(share=True)
+demo.launch()
