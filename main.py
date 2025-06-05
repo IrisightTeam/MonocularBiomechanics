@@ -13,10 +13,9 @@ from typing import List
 from utils import video_reader,load_metrabs
 from pose_pipeline.wrappers.bridging import get_model as get_metrabs_model
 
-# jax.config.update("jax_compilation_cache_dir", "./jax_cache")
-# jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
-# jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
-# jax.config.update("jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir")
+jax.config.update("jax_compilation_cache_dir", "./jax_cache")
+jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
 
 
 joint_names = ['backneck', 'upperback', 'clavicle', 'sternum', 'umbilicus', 'lfronthead', 'lbackhead', 'lback',
@@ -45,15 +44,8 @@ def save_metrabs_data(accumulated, video_name):
         pose2d.append(p2d[0].numpy())
         confs.append(np.ones((87)))
 
-        # For convenience, save the keypoints in case the notebook crashes or you have to restart
-        with open(f'{fname}_keypoints3d.npz', 'wb') as f:
-            np.savez(f, pose3d)
-        with open(f'{fname}_keypoints2d.npz', 'wb') as f:
-            np.savez(f, pose2d)
-        with open(f'{fname}_boxes.npz', 'wb') as f:
-            np.savez(f, boxes)
-        with open(f'{fname}_confs.npz', 'wb') as f:
-            np.savez(f, confs)
+        with open(f'{fname}_keypoints.npz', 'wb') as f:
+            np.savez(f, pose3d=pose3d, pose2d=pose2d, boxes=boxes, confs=confs)
 
 def get_framerate(video_path):
     """
@@ -70,14 +62,13 @@ def get_framerate(video_path):
 def load_metrabs_data(video_name):
     fname = video_name.split('/')[-1].split('.')[0]
     try:
-        with open(f'{fname}_boxes.npz', 'rb') as f:
-            boxes = np.load(f, allow_pickle=True)['arr_0']
-        with open(f'{fname}_confs.npz', 'rb') as f:
-            confs = np.load(f, allow_pickle=True)['arr_0']
-        with open(f'{fname}_keypoints2d.npz', 'rb') as f:
-            keypoints2d = np.load(f, allow_pickle=True)['arr_0']
-        with open(f'{fname}_keypoints3d.npz', 'rb') as f:
-            keypoints3d = np.load(f, allow_pickle=True)['arr_0']
+        with open(f'{fname}_keypoints.npz', 'rb') as f:
+            data = np.load(f, allow_pickle=True)
+            boxes = data['boxes']
+            keypoints2d = data['keypoints2d']
+            keypoints3d = data['keypoints3d']
+            confs = data['confs']
+
 
         return boxes, keypoints2d, keypoints3d, confs
     except FileNotFoundError:
@@ -120,10 +111,16 @@ def process_videos_with_metrabs(video_files: List[str], participant_id: str = "t
     return f"Successfully processed {video_count} videos with Metrabs."
 
 
-def process_videos_with_biomechanics(video_files: List[str]) -> str:
+def process_videos_with_biomechanics(video_files: List[str], progress=gr.Progress()) -> str:
     """
     Process the uploaded videos with biomechanics fitting. Replace this with your actual processing logic.
     """
+
+    max_iters = 6000 
+    def step_callback(step, model, dataset, metrics_dict, **kwargs):
+        if step % 500 == 0:
+            progress(step / max_iters, desc=f"Fitting model: Step {step}/{max_iters}")
+    
     if not video_files:
         return "No videos uploaded."
     
@@ -154,12 +151,24 @@ def process_videos_with_biomechanics(video_files: List[str]) -> str:
         phone_attitude=None,
     )
 
+    progress(0, desc="Building biomechanics model...")
     model = get_model(dataset, xml_path='humanoid/humanoid_torque.xml', joint_names=joint_names) # might need to change the site names
-    print("Fitting model...")
-    model, metrics = fit_model(model, dataset, lr_init_value=1e-3,max_iters=10000)
-    
-    # Here you would typically call your biomechanics fitting function
-    # For demonstration, we will just simulate a successful fitting
+    model, metrics = fit_model(model, dataset, lr_init_value=1e-3, max_iters=max_iters, step_callback=step_callback)
+    progress(1.0, desc="Biomechanics model fit successfully.")
+
+    for i, video_path in enumerate(video_files):
+        progress(i / len(video_files), desc=f"Processing video {i+1}/{len(video_files)} for biomechanics fitting")
+        timestamps = dataset.get_all_timestamps(i)
+
+        (state, _, _), (qpos, qvel, _), rnc = model(
+            timestamps, trajectory_selection=i, steps=0, skip_action=True, fast_inference=True, check_constraints=False
+        )
+
+        # save zip archive
+        fname = video_path.split('/')[-1].split('.')[0]
+        with open(f'{fname}_fitted_model.npz', 'wb') as f:
+            np.savez(f, qpos=np.array(qpos), qvel=np.array(qvel), rnc=np.array(rnc), sites=np.array(state.site_xpos), joints=np.array(state.xpos))
+
     
     return f"Successfully processed {len(dataset)} videos with biomechanics fitting."
 
