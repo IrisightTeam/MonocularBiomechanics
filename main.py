@@ -1,9 +1,89 @@
+from pose_pipeline.env import tensorflow_memory_limit, jax_memory_limit
+tensorflow_memory_limit()
+jax_memory_limit()
 import gradio as gr
+import jax
 import tensorflow as tf
 import tensorflow_hub as hub
+import numpy as np
+import jax.numpy as jnp
+from body_models.datajoint.monocular_dj import get_samsung_calibration, MonocularDataset, get_model, fit_model
 import os
 from typing import List
 from utils import video_reader,load_metrabs
+from pose_pipeline.wrappers.bridging import get_model as get_metrabs_model
+
+# jax.config.update("jax_compilation_cache_dir", "./jax_cache")
+# jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
+# jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+# jax.config.update("jax_persistent_cache_enable_xla_caches", "xla_gpu_per_fusion_autotune_cache_dir")
+
+
+joint_names = ['backneck', 'upperback', 'clavicle', 'sternum', 'umbilicus', 'lfronthead', 'lbackhead', 'lback',
+ 'lshom', 'lupperarm', 'lelbm', 'lforearm', 'lwrithumbside', 'lwripinkieside', 'lfin', 'lasis', 'lpsis', 'lfrontthigh', 'lthigh',
+ 'lknem', 'lankm', 'LHeel', 'lfifthmetatarsal', 'LBigToe', 'lcheek', 'lbreast', 'lelbinner', 'lwaist', 'lthumb', 'lfrontinnerthigh',
+ 'linnerknee', 'lshin', 'lfirstmetatarsal', 'lfourthtoe', 'lscapula', 'lbum', 'rfronthead', 'rbackhead', 'rback', 'rshom', 'rupperarm',
+ 'relbm', 'rforearm', 'rwrithumbside', 'rwripinkieside', 'rfin', 'rasis', 'rpsis', 'rfrontthigh', 'rthigh', 'rknem', 'rankm', 'RHeel',
+ 'rfifthmetatarsal', 'RBigToe', 'rcheek', 'rbreast', 'relbinner', 'rwaist', 'rthumb', 'rfrontinnerthigh', 'rinnerknee', 'rshin', 'rfirstmetatarsal',
+ 'rfourthtoe', 'rscapula', 'rbum', 'Head', 'mhip', 'CHip', 'Neck', 'LAnkle', 'LElbow', 'LHip', 'LHand', 'LKnee', 'LShoulder', 'LWrist', 'LFoot',
+ 'RAnkle', 'RElbow', 'RHip', 'RHand', 'RKnee', 'RShoulder', 'RWrist', 'RFoot']
+
+def save_metrabs_data(accumulated, video_name):
+    fname = video_name.split('/')[-1].split('.')[0]
+    boxes, pose3d, pose2d, confs = [], [], [], []
+    for i,(box, p3d, p2d)in enumerate(zip(accumulated['boxes'], accumulated['poses3d'], accumulated['poses2d'])):
+        # TODO: write logic for better box tracking
+        if len(box) == 0:
+            boxes.append(np.zeros((5)))
+            pose3d.append(np.zeros((87, 3)))
+            pose2d.append(np.zeros((87, 2)))
+            confs.append(np.zeros((87)))
+            print("no boxes")
+            continue
+        boxes.append(box[0].numpy())
+        pose3d.append(p3d[0].numpy())
+        pose2d.append(p2d[0].numpy())
+        confs.append(np.ones((87)))
+
+        # For convenience, save the keypoints in case the notebook crashes or you have to restart
+        with open(f'{fname}_keypoints3d.npz', 'wb') as f:
+            np.savez(f, pose3d)
+        with open(f'{fname}_keypoints2d.npz', 'wb') as f:
+            np.savez(f, pose2d)
+        with open(f'{fname}_boxes.npz', 'wb') as f:
+            np.savez(f, boxes)
+        with open(f'{fname}_confs.npz', 'wb') as f:
+            np.savez(f, confs)
+
+def get_framerate(video_path):
+    """
+    Get the framerate of a video file.
+    """
+    import cv2
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video file: {video_path}")
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    cap.release()
+    return fps
+
+def load_metrabs_data(video_name):
+    fname = video_name.split('/')[-1].split('.')[0]
+    try:
+        with open(f'{fname}_boxes.npz', 'rb') as f:
+            boxes = np.load(f, allow_pickle=True)['arr_0']
+        with open(f'{fname}_confs.npz', 'rb') as f:
+            confs = np.load(f, allow_pickle=True)['arr_0']
+        with open(f'{fname}_keypoints2d.npz', 'rb') as f:
+            keypoints2d = np.load(f, allow_pickle=True)['arr_0']
+        with open(f'{fname}_keypoints3d.npz', 'rb') as f:
+            keypoints3d = np.load(f, allow_pickle=True)['arr_0']
+
+        return boxes, keypoints2d, keypoints3d, confs
+    except FileNotFoundError:
+        print("No saved data found for this video.")
+        return None, None, None, None
+
 
 def process_videos_with_metrabs(video_files: List[str], participant_id: str = "test", session_date: str = "2025-06-03", progress=gr.Progress()) -> str:
     """
@@ -13,14 +93,11 @@ def process_videos_with_metrabs(video_files: List[str], participant_id: str = "t
         return "No videos uploaded."
 
     progress(0, desc="Loading model (takes 3 minutes)...")
-    model = load_metrabs()
-    model = hub.load('https://bit.ly/metrabs_l')  # Takes about 3 minutes
+    model = get_metrabs_model()
     progress(0.1, desc="Model loaded successfully.")
     skeleton = 'bml_movi_87'
-    joint_names = model.per_skeleton_joint_names[skeleton].numpy().astype(str)
-    joint_edges = model.per_skeleton_joint_edges[skeleton].numpy()
     
-    results = []
+    video_count = 0
     for video_idx, video_path in enumerate(video_files):
         if video_path is not None:
             vid, n_frames = video_reader(video_path)
@@ -37,9 +114,11 @@ def process_videos_with_metrabs(video_files: List[str], participant_id: str = "t
                     # concatenate the ragged tensor along the batch for each element in the dictionary
                     for key in accumulated.keys():
                         accumulated[key] = tf.concat([accumulated[key], pred[key]], axis=0)
-
+            save_metrabs_data(accumulated, video_path)
+            video_count += 1
     
-    return f"Successfully processed {len(results)} videos:\n" + "\n".join(results)
+    return f"Successfully processed {video_count} videos with Metrabs."
+
 
 def process_videos_with_biomechanics(video_files: List[str]) -> str:
     """
@@ -48,14 +127,41 @@ def process_videos_with_biomechanics(video_files: List[str]) -> str:
     if not video_files:
         return "No videos uploaded."
     
-    results = []
+    timestamps_list = []
+    keypoints2d_list = []
+    keypoints3d_list = []
+    confs_list = []
     for i, video_path in enumerate(video_files):
         if video_path is not None:
-            filename = os.path.basename(video_path)
-            file_size = os.path.getsize(video_path)
-            results.append(f"Video {i+1}: {filename} (Size: {file_size:,} bytes)")
+            boxes, keypoints2d, keypoints3d, confs = load_metrabs_data(video_path)
+            if boxes is None:
+                print(f"Video {video_path}: No Metrabs data found.")
+                continue
+
+            fps = get_framerate(video_path)
+            timestamps = np.arange(0, len(keypoints2d)) / fps
+            timestamps_list.append(timestamps)
+            keypoints2d_list.append(keypoints2d[jnp.newaxis])  # Add camera dimension
+            keypoints3d_list.append(keypoints3d[jnp.newaxis])  # Add camera dimension
+            confs_list.append(jnp.ones_like(keypoints2d[...,0])[jnp.newaxis])  # fake confidences
+
+    dataset = MonocularDataset(
+        timestamps=timestamps_list,
+        keypoints_2d=keypoints2d_list,
+        keypoints_3d=keypoints3d_list,
+        keypoint_confidence=confs_list,
+        camera_params=get_samsung_calibration(),
+        phone_attitude=None,
+    )
+
+    model = get_model(dataset, xml_path='humanoid/humanoid_torque.xml', joint_names=joint_names) # might need to change the site names
+    print("Fitting model...")
+    model, metrics = fit_model(model, dataset, lr_init_value=1e-3,max_iters=10000)
     
-    return f"Successfully processed {len(results)} videos with biomechanics fitting:\n" + "\n".join(results)
+    # Here you would typically call your biomechanics fitting function
+    # For demonstration, we will just simulate a successful fitting
+    
+    return f"Successfully processed {len(dataset)} videos with biomechanics fitting."
 
 def clear_videos():
     """Clear the video upload component"""
