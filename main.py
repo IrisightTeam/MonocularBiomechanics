@@ -2,6 +2,8 @@ from pose_pipeline.env import tensorflow_memory_limit, jax_memory_limit
 
 tensorflow_memory_limit()
 jax_memory_limit()
+import plotly.graph_objects as go
+import plotly.express as px
 import gradio as gr
 import cv2
 import jax
@@ -19,6 +21,10 @@ import os
 from typing import List
 from utils import video_reader, load_metrabs, joint_names
 from pose_pipeline.wrappers.bridging import get_model as get_metrabs_model
+from body_models.biomechanics_mjx.forward_kinematics import ForwardKinematics
+fk = ForwardKinematics(
+    xml_path="humanoid/humanoid_torque.xml",
+)
 
 jax.config.update("jax_compilation_cache_dir", "./jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
@@ -45,7 +51,7 @@ def save_metrabs_data(accumulated, video_name):
         confs.append(np.ones((87)))
 
         with open(f"{fname}_keypoints.npz", "wb") as f:
-            np.savez(f, pose3d=pose3d, pose2d=pose2d, boxes=boxes, confs=confs)
+            np.savez(f, keypoints3d=pose3d, keypoints2d=pose2d, boxes=boxes, confs=confs)
 
 
 def get_framerate(video_path):
@@ -79,8 +85,6 @@ def load_metrabs_data(video_name):
 
 def process_videos_with_metrabs(
     video_files: List[str],
-    participant_id: str = "test",
-    session_date: str = "2025-06-03",
     progress=gr.Progress(),
 ) -> str:
     """
@@ -128,7 +132,7 @@ def process_videos_with_biomechanics(
     Process the uploaded videos with biomechanics fitting. Replace this with your actual processing logic.
     """
 
-    max_iters = 6000
+    max_iters = 10000
 
     def step_callback(step, model, dataset, metrics_dict, **kwargs):
         if step % 500 == 0:
@@ -200,6 +204,7 @@ def process_videos_with_biomechanics(
         with open(f"{fname}_fitted_model.npz", "wb") as f:
             np.savez(
                 f,
+                timestamps=np.array(timestamps),
                 qpos=np.array(qpos),
                 qvel=np.array(qvel),
                 rnc=np.array(rnc),
@@ -210,6 +215,107 @@ def process_videos_with_biomechanics(
     return f"Successfully processed {len(dataset)} videos with biomechanics fitting."
 
 
+def get_available_fitted_models():
+    """Get list of available fitted model files"""
+    fitted_files = [f for f in os.listdir('.') if f.endswith('_fitted_model.npz')]
+    return fitted_files if fitted_files else ["No fitted models found"]
+
+def load_and_visualize_data(selected_file, selected_joints=None):
+    """Load saved data and create visualizations"""
+    if not selected_file or selected_file == "No fitted models found":
+        return "Please select a fitted model file first.", None, None
+    
+    selected_joint_inds = [fk.joint_names.index(joint) for joint in selected_joints] if selected_joints else []
+    
+    fname = selected_file.replace('_fitted_model.npz', '')
+    
+    # Try to load keypoints data
+    keypoints_file = f"{fname}_keypoints.npz"
+    biomech_file = selected_file
+    
+    result_text = ""
+    plot1 = None
+    plot2 = None
+    
+    if os.path.exists(keypoints_file):
+        with open(keypoints_file, "rb") as f:
+            data = np.load(f, allow_pickle=True)
+            result_text += f"Loaded keypoints data: {keypoints_file}\n"
+            result_text += f"- Frames: {len(data['keypoints3d'])}\n"
+            result_text += f"- 3D keypoints shape: {data['keypoints3d'].shape}\n"
+            result_text += f"- 2D keypoints shape: {data['keypoints2d'].shape}\n\n"
+    else:
+        result_text += f"No keypoints data found for {fname}\n\n"
+    
+    if os.path.exists(biomech_file):
+        with open(biomech_file, "rb") as f:
+            data = np.load(f, allow_pickle=True)
+            result_text += f"Loaded biomechanics data: {biomech_file}\n"
+            result_text += f"- Timesteps: {len(data['qpos'])}\n"
+            result_text += f"- Joint positions shape: {data['qpos'].shape}\n"
+            result_text += f"- Joint velocities shape: {data['qvel'].shape}\n"
+
+            # Create Plot 1: Joint angles over time
+            qpos = data['qpos']
+            time_steps = np.arange(len(qpos))
+            
+            fig1 = go.Figure()
+            # Plot selected joints
+            if selected_joints:
+                for joint_idx in selected_joint_inds:
+                    if joint_idx < qpos.shape[1]:
+                        fig1.add_trace(go.Scatter(
+                            x=time_steps, 
+                            y=qpos[:, joint_idx], 
+                            mode='lines',
+                            name=f'Joint {fk.joint_names[joint_idx]}'
+                        ))
+            else:
+                # Default to first 6 joints if none selected
+                for i in range(min(6, qpos.shape[1])):
+                    fig1.add_trace(go.Scatter(
+                        x=time_steps, 
+                        y=qpos[:, i], 
+                        mode='lines',
+                        name=f'Joint {i+1}'
+                    ))
+            fig1.update_layout(
+                title="Joint Angles Over Time",
+                xaxis_title="Time Steps",
+                yaxis_title="Angle (radians)"
+            )
+            plot1 = fig1
+
+            # placeholder for second plot
+            plot2 = None
+            
+    else:
+        result_text += f"No biomechanics data found for {fname}\n"
+    
+    return result_text, plot1, plot2 
+
+def get_joint_options(selected_file):
+    """Get available joint options for the selected model"""
+    if not selected_file or selected_file == "No fitted models found":
+        return gr.Dropdown(choices=[], value=[])
+    
+    biomech_file = selected_file
+    
+    if os.path.exists(biomech_file):
+        with open(biomech_file, "rb") as f:
+            data = np.load(f, allow_pickle=True)
+            num_joints = data['qpos'].shape[1]
+            joint_choices = [(f"Joint {i+1}", i) for i in range(num_joints)]
+            default_selection = list(range(min(6, num_joints)))  # Default to first 6
+            
+            return gr.Dropdown(
+                choices=joint_choices,
+                value=default_selection,
+                multiselect=True
+            )
+    
+    return gr.Dropdown(choices=[], value=[])
+
 def clear_videos():
     """Clear the video upload component"""
     return None
@@ -218,56 +324,94 @@ def clear_videos():
 # Create the Gradio interface
 with gr.Blocks(title="Open Portable Biomechanics Lab") as demo:
     gr.Markdown("# Open Portable Biomechanics Lab")
-    gr.Markdown(
-        "Upload multiple videos for processing. Supported formats: MP4, AVI, MOV, MKV"
-    )
 
-    with gr.Row():
-        with gr.Column():
-            video_input = gr.File(
-                label="Upload Videos",
-                file_count="multiple",
-                file_types=["video"],
-                height=200,
-            )
+    with gr.Tab("Processing"):
+        gr.Markdown(
+            "Upload multiple videos for processing. Supported formats: MP4, AVI, MOV, MKV"
+        )
+        with gr.Row():
+            with gr.Column():
+                video_input = gr.File(
+                    label="Upload Videos",
+                    file_count="multiple",
+                    file_types=["video"],
+                    height=200,
+                )
 
-            participant_id_input = gr.Textbox(
-                label="Participant ID",
-                placeholder="Type something here...",
-                lines=1,
-            )
+                with gr.Row():
+                    metrabs_btn = gr.Button("1. Keypoint Detection", variant="primary")
+                    mjx_btn = gr.Button("2. Biomechanical Fitting", variant="primary")
 
-            date_input = gr.Textbox(
-                label="Session Date",
-                placeholder="Type something here...",
-                lines=1,
-            )
+            with gr.Column():
+                output_text = gr.Textbox(
+                    label="Processing Results", lines=10, max_lines=20, interactive=False
+                )
 
-            with gr.Row():
-                metrabs_btn = gr.Button("1. Keypoint Detection", variant="primary")
-                mjx_btn = gr.Button("2. Biomechanical Fitting", variant="primary")
+        # Event handlers
+        metrabs_btn.click(
+            fn=process_videos_with_metrabs,
+            inputs=[video_input],
+            outputs=[output_text],
+        )
 
-        with gr.Column():
-            output_text = gr.Textbox(
-                label="Processing Results", lines=10, max_lines=20, interactive=False
-            )
+        mjx_btn.click(
+            fn=process_videos_with_biomechanics, inputs=[video_input], outputs=[output_text]
+        )
 
-    # Event handlers
-    metrabs_btn.click(
-        fn=process_videos_with_metrabs,
-        inputs=[video_input, participant_id_input, date_input],
-        outputs=[output_text],
-    )
+        # Also process when files are uploaded
+        video_input.change(
+            fn=lambda files: f"Uploaded {len(files) if files else 0} videos. Click 'Process Videos' to continue.",
+            inputs=[video_input],
+            outputs=[output_text],
+        )
 
-    mjx_btn.click(
-        fn=process_videos_with_biomechanics, inputs=[video_input], outputs=[output_text]
-    )
+    with gr.Tab("Kinematic Plots"):
+        gr.Markdown("Visualize and analyze processed data")
+        with gr.Row():
+            with gr.Column():
 
-    # Also process when files are uploaded
-    video_input.change(
-        fn=lambda files: f"Uploaded {len(files) if files else 0} videos. Click 'Process Videos' to continue.",
-        inputs=[video_input],
-        outputs=[output_text],
-    )
+                # Dropdown with all fitted model files
+                fitted_model_dropdown = gr.Dropdown(
+                    choices=get_available_fitted_models(),
+                    label="Select Fitted Model",
+                    value=None,
+                    interactive=True
+                )
+
+                joint_selection_dropdown = gr.Dropdown(
+                    choices=fk.joint_names,
+                    label="Select Joints to Plot",
+                    multiselect=True,
+                    value=[],
+                    interactive=True
+                )
+                
+                refresh_btn = gr.Button("Refresh File List", variant="secondary")
+
+                load_data_btn = gr.Button("Load Data", variant="primary")
+                
+            with gr.Column():
+                viz_info = gr.Textbox(
+                    label="Data Information",
+                    lines=10,
+                    interactive=False
+                )
+                
+                # Placeholder for plots - you can expand these
+                viz_plot1 = gr.Plot(label="Visualization")
+                viz_plot2 = gr.Plot(label="Additional Plot")
+        
+        # Event handlers for visualization tab
+        refresh_btn.click(
+            fn=lambda: gr.Dropdown(choices=get_available_fitted_models()),
+            outputs=[fitted_model_dropdown]
+        )
+        
+        load_data_btn.click(
+            fn=load_and_visualize_data,
+            inputs=[fitted_model_dropdown, joint_selection_dropdown],
+            outputs=[viz_info, viz_plot1, viz_plot2]
+        )
+
 
 demo.launch(share=True)
