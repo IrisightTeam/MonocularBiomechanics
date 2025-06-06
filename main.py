@@ -19,7 +19,7 @@ from monocular_demos.biomechanics_mjx.monocular_trajectory import (
     get_model,
 )
 from monocular_demos.dataset import MonocularDataset,get_samsung_calibration
-from pose_pipeline.wrappers.bridging import get_model as get_metrabs_model
+from monocular_demos.utils import load_metrabs 
 from monocular_demos.utils import joint_names, video_reader
 
 fk = ForwardKinematics(
@@ -123,7 +123,7 @@ def process_videos_with_metrabs(
         return "No videos uploaded."
 
     progress(0, desc="Loading model (takes 3 minutes)...")
-    model = get_metrabs_model()
+    model = load_metrabs()
     progress(0.1, desc="Model loaded successfully.")
     skeleton = "bml_movi_87"
 

@@ -280,6 +280,27 @@ def huber(x, delta=5.0):
     x = jnp.where(jnp.abs(x) < delta, 0.5 * x**2, delta * (jnp.abs(x) - 0.5 * delta))
     return x
 
+def get_default_wrapper():
+    """
+    Convenience function to get a model for the 3D MOVI keypoints.
+
+    Returns:
+        A tuple of the model and loss function.
+    """
+
+    from monocular_demos.biomechanics_mjx.forward_kinematics import ForwardKinetics,movi_joint_names
+
+    # default forward kinematic model
+    fk = ForwardKinetics(site_reorder=movi_joint_names)
+
+    # default scaler mixer
+    scale_mixer = fk.build_default_scale_mixer()
+
+    # use the implicit function wrapper
+    fkw = KineticsWrapper(fk, scale_mixer=scale_mixer, key=jax.random.PRNGKey(0))
+
+    return fkw
+
 def get_custom_wrapper(fk: ForwardKinetics, dataset: MonocularDataset, dist=1.5, **kwargs) -> KineticsWrapper:
     """This will buiild an implicit trajectory with custom initializations computed from the dataset."""
     import numpy as np
