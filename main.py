@@ -1,30 +1,29 @@
-from pose_pipeline.env import tensorflow_memory_limit, jax_memory_limit
+from pose_pipeline.env import jax_memory_limit, tensorflow_memory_limit
 
 tensorflow_memory_limit()
 jax_memory_limit()
-import plotly.graph_objects as go
-import plotly.express as px
-import gradio as gr
-import cv2
-import jax
-import tensorflow as tf
-import tensorflow_hub as hub
-import numpy as np
-import jax.numpy as jnp
-from body_models.datajoint.monocular_dj import (
-    get_samsung_calibration,
-    MonocularDataset,
-    get_model,
-    fit_model,
-)
 import os
 from typing import List
-from utils import video_reader, load_metrabs, joint_names
+
+import cv2
+import gradio as gr
+import jax
+import jax.numpy as jnp
+import numpy as np
+import plotly.graph_objects as go
+import tensorflow as tf
+from monocular_demos.biomechanics_mjx.forward_kinematics import ForwardKinematics
+from monocular_demos.biomechanics_mjx.visualize import render_trajectory
+from monocular_demos.biomechanics_mjx.monocular_trajectory import (
+    fit_model,
+    get_model,
+)
+from monocular_demos.dataset import MonocularDataset,get_samsung_calibration
 from pose_pipeline.wrappers.bridging import get_model as get_metrabs_model
-from body_models.biomechanics_mjx.forward_kinematics import ForwardKinematics
-from body_models.biomechanics_mjx.visualize import render_trajectory
+from monocular_demos.utils import joint_names, video_reader
+
 fk = ForwardKinematics(
-    xml_path="humanoid/humanoid_torque_rl.xml",
+    xml_path="monocular_demos/biomechanics_mjx/data/humanoid/humanoid_torque.xml",
 )
 
 jax.config.update("jax_compilation_cache_dir", "./jax_cache")
@@ -206,7 +205,7 @@ def process_videos_with_biomechanics(
 
     progress(0, desc="Building biomechanics model...")
     model = get_model(
-        dataset, xml_path="humanoid/humanoid_torque_rl.xml", joint_names=joint_names
+        dataset, xml_path="monocular_demos/biomechanics_mjx/data/humanoid/humanoid_torque.xml", joint_names=joint_names
     )  # might need to change the site names
     model, metrics = fit_model(
         model,
