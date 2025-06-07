@@ -1,5 +1,5 @@
 [project]
-name = "monocular-demos"
+name = "monocular_demos"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -9,6 +9,13 @@ dependencies = [
     "plotly",
     "jax",
     "jaxlib",
+    "jaxlie",
+    "jmp",
     "equinox",
     "tensorflow_hub",
+    "mujoco-mjx",
+    "GaitTransformer @ git+https://github.com/IntelligentSensingAndRehabilitation/GaitTransformer.git"
 ]
+
+[tool.setuptools.package-data]
+"*" = ["biomechanics_mjx/data/humanoid/**/*"]
