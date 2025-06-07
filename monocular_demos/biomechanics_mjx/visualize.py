@@ -45,7 +45,13 @@ def render_trajectory(
         if filename is None, returns the images as a list
     """
 
-    from body_models.biomechanics_mjx.forward_kinematics import ForwardKinematics, offset_sites, scale_model, set_margin, shift_geom_vertically
+    from monocular_demos.biomechanics_mjx.forward_kinematics import (
+        ForwardKinematics,
+        offset_sites,
+        scale_model,
+        set_margin,
+        shift_geom_vertically,
+    )
     import numpy as np
 
     fk = ForwardKinematics(xml_path=xml_path)
@@ -60,7 +66,12 @@ def render_trajectory(
             model = set_margin(model, margin)
 
         if heel_vertical_offset is not None:
-            heel_geom_names = ["l_foot_col1", "l_foot_col3", "r_foot_col1", "r_foot_col3"]
+            heel_geom_names = [
+                "l_foot_col1",
+                "l_foot_col3",
+                "r_foot_col1",
+                "r_foot_col3",
+            ]
             heel_idx = np.array([fk.geom_names.index(g) for g in heel_geom_names])
             model = shift_geom_vertically(model, heel_idx, heel_vertical_offset)
 
@@ -133,7 +144,9 @@ def render_trajectory(
         import cv2
         import numpy as np
 
-        cap = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        cap = cv2.VideoWriter(
+            filename, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+        )
 
         for i in trange(len(images)):
             # fix the color channels
@@ -167,8 +180,8 @@ def render_tiled(
     Returns:
         images: list of images
     """
-    from body_models.biomechanics_mjx import ForwardKinematics
-    from body_models.biomechanics_mjx.forward_kinematics import offset_sites
+    from monocular_demos.biomechanics_mjx import ForwardKinematics
+    from monocular_demos.biomechanics_mjx.forward_kinematics import offset_sites
 
     data = mujoco.MjData(model)
 
@@ -207,7 +220,9 @@ def render_tiled(
         frame_offset_left = int(np.mod(column_offset, 1) * panel_size[0])
         frame_offset_right = int(frame_offset_left + image_size[0])
 
-        video_idx = np.arange(first_column * n_height, first_column * n_height + vids_per_frame)
+        video_idx = np.arange(
+            first_column * n_height, first_column * n_height + vids_per_frame
+        )
         video_idx = np.mod(video_idx, n_videos)
 
         images = [render_pose_idx(qpos[i], idx) for i in video_idx]
@@ -227,7 +242,9 @@ def render_tiled(
         import cv2
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        video = cv2.VideoWriter(filename, fourcc, video_fps, (image_size[0], image_size[1]))
+        video = cv2.VideoWriter(
+            filename, fourcc, video_fps, (image_size[0], image_size[1])
+        )
         for image in tqdm(images):
             # convert colorspace
             image = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_RGB2BGR)
@@ -292,12 +309,18 @@ def render_trajectory_keypoints(
     from matplotlib.animation import FFMpegWriter
 
     if k3d_gt is not None:
-        assert k3d.shape[0] == k3d_gt.shape[0], "The number of frames must be the same for both sets of keypoints."
+        assert (
+            k3d.shape[0] == k3d_gt.shape[0]
+        ), "The number of frames must be the same for both sets of keypoints."
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
     # Set up the writer
-    metadata = dict(title="3D Scatter Plot Time Series", artist="Matplotlib", comment="Scatter plot animation")
+    metadata = dict(
+        title="3D Scatter Plot Time Series",
+        artist="Matplotlib",
+        comment="Scatter plot animation",
+    )
     writer = FFMpegWriter(fps=fps, metadata=metadata)
 
     with writer.saving(fig, filename, dpi=100):
@@ -308,9 +331,16 @@ def render_trajectory_keypoints(
                 # only plot confident points
                 if gt_confidence is not None:
                     confident_points = gt_confidence[t] > confidence_threshold
-                    ax.scatter(k3d_gt[t, confident_points, 0], k3d_gt[t, confident_points, 1], k3d_gt[t, confident_points, 2], c="black")
+                    ax.scatter(
+                        k3d_gt[t, confident_points, 0],
+                        k3d_gt[t, confident_points, 1],
+                        k3d_gt[t, confident_points, 2],
+                        c="black",
+                    )
                 else:
-                    ax.scatter(k3d_gt[t, :, 0], k3d_gt[t, :, 1], k3d_gt[t, :, 2], c="black")
+                    ax.scatter(
+                        k3d_gt[t, :, 0], k3d_gt[t, :, 1], k3d_gt[t, :, 2], c="black"
+                    )
                 # my_max = k3d.max(axis=1).max(axis=0)
                 # ax.scatter(my_max[0],my_max[1],my_max[2],c='r')
                 # my_min = k3d.min(axis=1).min(axis=0)
@@ -341,7 +371,9 @@ def jupyter_embed_video(video_filename: str):
     # close fid
     os.close(fid)
 
-    subprocess.run(["ffmpeg", "-y", "-i", video_filename, "-hide_banner", "-loglevel", "error", fn])
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", video_filename, "-hide_banner", "-loglevel", "error", fn]
+    )
 
     video = open(fn, "rb").read()
     video_encoded = b64encode(video).decode("ascii")

@@ -1,3 +1,6 @@
+[tool.black]
+line-length = 150
+
 [project]
 name = "monocular_demos"
 version = "0.1.0"
@@ -14,7 +17,6 @@ dependencies = [
     "equinox",
     "tensorflow_hub",
     "mujoco-mjx",
-    "GaitTransformer @ git+https://github.com/IntelligentSensingAndRehabilitation/GaitTransformer.git"
 ]
 
 [tool.setuptools.package-data]
