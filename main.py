@@ -1,4 +1,4 @@
-from pose_pipeline.env import jax_memory_limit, tensorflow_memory_limit
+from monocular_demos.utils import jax_memory_limit, tensorflow_memory_limit
 
 tensorflow_memory_limit()
 jax_memory_limit()

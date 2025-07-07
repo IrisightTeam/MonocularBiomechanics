@@ -3,7 +3,6 @@ import inspect
 from collections import OrderedDict
 from typing import Callable, Dict, List, Tuple, Union
 
-import chex
 import equinox as eqx
 import jax
 import mujoco

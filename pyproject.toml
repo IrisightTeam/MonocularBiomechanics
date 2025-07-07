@@ -17,6 +17,8 @@ dependencies = [
     "equinox",
     "tensorflow_hub",
     "mujoco-mjx",
+    "opencv-python",
+    "optax",
 ]
 
 [tool.setuptools.package-data]
