@@ -11,6 +11,7 @@
 <sup>5</sup>Department of Physical Medicine and Rehabilitation, Northwestern University Feinberg School of Medicine, Chicago, IL, USA<br>
 
 </div>
+<img src="overlay_fig.png" width="800">
 
 > This repository includes code and a gradio demo for running the single camera (monocular) biomechanical fitting code from smartphone videos.
 
