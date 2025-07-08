@@ -41,7 +41,7 @@ A local webpage will open to upload and run the code.
 A jupyter notebook with steps to run the pipeline can be found [here](https://github.com/IntelligentSensingAndRehabilitation/MonocularBiomechanics/blob/main/monocular-demo.ipynb).
 
 # Citation
-Preprint coming soon.
+[Preprint](https://drive.google.com/file/d/1WIdqdYQ3UaBXbTYgQ0npmWYYGMHwvJ6E/view?usp=sharing) coming soon.
 ```bibtex
 @inproceedings{tba,
   title={{tba}},
