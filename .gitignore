@@ -1,7 +1,8 @@
-*.MOV
-*.npz
-*.mp4
 .gradio/
+.jax_cache/
+
+# Windows Zone Identifier files
+*:Zone.Identifier
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

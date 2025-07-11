@@ -1,5 +1,4 @@
 from monocular_demos.utils import jax_memory_limit, tensorflow_memory_limit
-
 tensorflow_memory_limit()
 jax_memory_limit()
 import os
@@ -18,17 +17,17 @@ from monocular_demos.biomechanics_mjx.monocular_trajectory import (
     fit_model,
     get_model,
 )
+from monocular_demos.utils import load_metrabs, joint_names, video_reader
 from monocular_demos.dataset import MonocularDataset,get_samsung_calibration
-from monocular_demos.utils import load_metrabs 
-from monocular_demos.utils import joint_names, video_reader
 
 fk = ForwardKinematics(
     xml_path="monocular_demos/biomechanics_mjx/data/humanoid/humanoid_torque.xml",
 )
 
-jax.config.update("jax_compilation_cache_dir", "./jax_cache")
+jax.config.update("jax_compilation_cache_dir", "./.jax_cache")
 jax.config.update("jax_persistent_cache_min_entry_size_bytes", -1)
 jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+jax.config.update("jax_enable_x64", True)
 
 
 def save_metrabs_data(accumulated, video_name):
@@ -71,7 +70,7 @@ def render_mjx(selected_file, progress=gr.Progress()):
             data = np.load(f, allow_pickle=True)
             result_text += f"Loaded biomechanics data: {biomech_file}\n"
             qpos = data['qpos']
-    progress(0, desc="Rendering Video...")
+    progress(0, desc="Rendering Video (progress will not display linearly)...")
     render_trajectory(
         qpos,
         filename = video_filename,
@@ -269,7 +268,6 @@ def load_and_visualize_data(selected_file, selected_joints=None):
     
     result_text = ""
     plot1 = None
-    plot2 = None
     
     if os.path.exists(keypoints_file):
         with open(keypoints_file, "rb") as f:
@@ -319,14 +317,10 @@ def load_and_visualize_data(selected_file, selected_joints=None):
                 yaxis_title="Angle (radians)"
             )
             plot1 = fig1
-
-            # placeholder for second plot
-            plot2 = None
-            
     else:
         result_text += f"No biomechanics data found for {fname}\n"
     
-    return result_text, plot1, plot2 
+    return result_text, plot1
 
 def get_joint_options(selected_file):
     """Get available joint options for the selected model"""
@@ -433,7 +427,6 @@ with gr.Blocks(title="Open Portable Biomechanics Lab") as demo:
                 
                 # Placeholder for plots - you can expand these
                 viz_plot1 = gr.Plot(label="Visualization")
-                viz_plot2 = gr.Plot(label="Additional Plot")
         
         # Event handlers for visualization tab
         refresh_btn.click(
@@ -444,7 +437,7 @@ with gr.Blocks(title="Open Portable Biomechanics Lab") as demo:
         load_data_btn.click(
             fn=load_and_visualize_data,
             inputs=[fitted_model_dropdown, joint_selection_dropdown],
-            outputs=[viz_info, viz_plot1, viz_plot2]
+            outputs=[viz_info, viz_plot1]
         )
     
     with gr.Tab("Visualization"):
