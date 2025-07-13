@@ -46,12 +46,13 @@ A jupyter notebook with steps to run the pipeline can be found [here](https://gi
 This work has been presented at the [2024 American Society of Biomechanics Meeting](https://drive.google.com/open?id=1CEZBhwAYALvUds0VbFy50U1LmOfgS0kO&usp=drive_fs) and [2025 European Society of Biomechanics Meeting](https://drive.google.com/open?id=19y1_F-0o5CVRFdihe-0kReQ9baH-jFX4&usp=drive_fs).
 
 
-[Preprint](https://drive.google.com/file/d/1WIdqdYQ3UaBXbTYgQ0npmWYYGMHwvJ6E/view?usp=sharing) coming soon.
 ```bibtex
-@inproceedings{tba,
-  title={{tba}},
-  author={tba},
-  booktitle={tba},
-  year={2025}
+@misc{peiffer_portable_2025,
+	title = {Portable Biomechanics Laboratory: Clinically Accessible Movement Analysis from a Handheld Smartphone},
+	doi = {10.48550/arXiv.2507.08268},
+	number = {{arXiv}:2507.08268},
+	publisher = {{arXiv}},
+	author = {Peiffer, J. D. and Shah, Kunal and Djuraskovic, Irina and Anarwala, Shawana and Abdou, Kayan and Patel, Rujvee and Jayabalan, Prakash and Pennicooke, Brenton and Cotton, R. James},
+	date = {2025-07-11},
 }
 ```
