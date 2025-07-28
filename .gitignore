@@ -1,5 +1,6 @@
 .gradio/
 .jax_cache/
+.python-version
 
 # Windows Zone Identifier files
 *:Zone.Identifier
