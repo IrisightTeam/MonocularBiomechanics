@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import tensorflow_hub as hub
+import os
 
 def jax_memory_limit():
     import os
@@ -77,10 +78,16 @@ def video_reader(filename: str, batch_size: int = 8, width: int | None = None):
     cap.release()  # Release the initial capture object
     return frame_generator(), n_frames
 
-def load_metrabs():
+def load_metrabs(path:str | None = None):
     if load_metrabs.model is not None:
         return load_metrabs.model
+    if path is not None and os.path.exists(path):
+        load_metrabs.model = hub.load(path)
+        return load_metrabs.model
     load_metrabs.model = hub.load('https://bit.ly/metrabs_l')  # Takes about 3 minutes
+    if path is not None:
+        # save a local copy to keep from waiting as long
+        tf.saved_model.save(load_metrabs.model, path)
     return load_metrabs.model
 
 load_metrabs.model = None
