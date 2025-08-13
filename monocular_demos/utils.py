@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 import tensorflow_hub as hub
+import tensorflow as tf
 import os
 
 def jax_memory_limit():
