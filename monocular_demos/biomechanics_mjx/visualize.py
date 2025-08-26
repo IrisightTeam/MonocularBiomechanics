@@ -145,7 +145,7 @@ def render_trajectory(
         import numpy as np
 
         cap = cv2.VideoWriter(
-            filename, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)
+            filename, cv2.VideoWriter_fourcc(*'H264'), fps, (width, height)
         )
 
         for i in trange(len(images)):
